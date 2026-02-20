@@ -1,0 +1,86 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Hackathon demo stack for testing IaC drift reconciler",
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "Default": "hackathon"
+    }
+  },
+  "Resources": {
+    "DemoBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "${ProjectName}-demo-bucket-${AWS::AccountId}"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          }
+        ]
+      }
+    },
+    "DemoSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Demo security group for drift testing",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          }
+        ]
+      }
+    },
+    "DemoSSMParameter": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "/${ProjectName}/demo/config"
+        },
+        "Type": "String",
+        "Value": "initial-value",
+        "Description": "Demo SSM parameter for drift testing",
+        "Tags": {
+          "project": {
+            "Ref": "ProjectName"
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Value": {
+        "Ref": "DemoBucket"
+      },
+      "Description": "Name of the demo S3 bucket"
+    },
+    "SecurityGroupId": {
+      "Value": {
+        "Ref": "DemoSecurityGroup"
+      },
+      "Description": "ID of the demo security group"
+    },
+    "SSMParameterName": {
+      "Value": {
+        "Ref": "DemoSSMParameter"
+      },
+      "Description": "Name of the demo SSM parameter"
+    }
+  }
+}
