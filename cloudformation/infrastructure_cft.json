@@ -1,86 +1,149 @@
 {
-  "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Hackathon demo stack for testing IaC drift reconciler",
-  "Parameters": {
-    "ProjectName": {
-      "Type": "String",
-      "Default": "hackathon"
-    }
-  },
-  "Resources": {
-    "DemoBucket": {
-      "Type": "AWS::S3::Bucket",
-      "Properties": {
-        "BucketName": {
-          "Fn::Sub": "${ProjectName}-demo-bucket-${AWS::AccountId}"
-        },
-        "Tags": [
-          {
-            "Key": "project",
-            "Value": {
-              "Ref": "ProjectName"
-            }
-          }
-        ]
-      }
-    },
-    "DemoSecurityGroup": {
-      "Type": "AWS::EC2::SecurityGroup",
-      "Properties": {
+  "generated_at": "2026-02-20T22:57:38.029225+00:00",
+  "stack_name": "phantom-test-stack",
+  "drift_status": "DRIFTED",
+  "drift_count": 1,
+  "drifted_resources": [
+    {
+      "LogicalId": "DemoSecurityGroup",
+      "PhysicalId": "",
+      "ResourceType": "AWS::EC2::SecurityGroup",
+      "DriftStatus": "MODIFIED",
+      "ExpectedProperties": {
         "GroupDescription": "Demo security group for drift testing",
         "SecurityGroupIngress": [
           {
-            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
             "FromPort": 80,
-            "ToPort": 80,
-            "CidrIp": "0.0.0.0/0"
+            "IpProtocol": "tcp",
+            "ToPort": 80
           }
         ],
         "Tags": [
           {
-            "Key": "project",
-            "Value": {
+            "Value": "hackathon",
+            "Key": "project"
+          }
+        ]
+      },
+      "ActualProperties": {
+        "GroupDescription": "Demo security group for drift testing",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": 80,
+            "IpProtocol": "tcp",
+            "ToPort": 80
+          },
+          {
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": 22,
+            "IpProtocol": "tcp",
+            "ToPort": 22
+          }
+        ],
+        "Tags": [
+          {
+            "Value": "hackathon",
+            "Key": "project"
+          }
+        ]
+      },
+      "PropertyDiffs": [
+        {
+          "PropertyPath": "/SecurityGroupIngress/1",
+          "ExpectedValue": "null",
+          "ActualValue": "{\"CidrIp\":\"0.0.0.0/0\",\"FromPort\":22,\"IpProtocol\":\"tcp\",\"ToPort\":22}",
+          "DifferenceType": "ADD"
+        }
+      ]
+    }
+  ],
+  "cloudtrail_events": [],
+  "original_template": {
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Hackathon demo stack for testing IaC drift reconciler",
+    "Parameters": {
+      "ProjectName": {
+        "Type": "String",
+        "Default": "hackathon"
+      }
+    },
+    "Resources": {
+      "DemoBucket": {
+        "Type": "AWS::S3::Bucket",
+        "Properties": {
+          "BucketName": {
+            "Fn::Sub": "${ProjectName}-demo-bucket-${AWS::AccountId}"
+          },
+          "Tags": [
+            {
+              "Key": "project",
+              "Value": {
+                "Ref": "ProjectName"
+              }
+            }
+          ]
+        }
+      },
+      "DemoSecurityGroup": {
+        "Type": "AWS::EC2::SecurityGroup",
+        "Properties": {
+          "GroupDescription": "Demo security group for drift testing",
+          "SecurityGroupIngress": [
+            {
+              "IpProtocol": "tcp",
+              "FromPort": 80,
+              "ToPort": 80,
+              "CidrIp": "0.0.0.0/0"
+            }
+          ],
+          "Tags": [
+            {
+              "Key": "project",
+              "Value": {
+                "Ref": "ProjectName"
+              }
+            }
+          ]
+        }
+      },
+      "DemoSSMParameter": {
+        "Type": "AWS::SSM::Parameter",
+        "Properties": {
+          "Name": {
+            "Fn::Sub": "/${ProjectName}/demo/config"
+          },
+          "Type": "String",
+          "Value": "initial-value",
+          "Description": "Demo SSM parameter for drift testing",
+          "Tags": {
+            "project": {
               "Ref": "ProjectName"
             }
           }
-        ]
-      }
-    },
-    "DemoSSMParameter": {
-      "Type": "AWS::SSM::Parameter",
-      "Properties": {
-        "Name": {
-          "Fn::Sub": "/${ProjectName}/demo/config"
-        },
-        "Type": "String",
-        "Value": "initial-value",
-        "Description": "Demo SSM parameter for drift testing",
-        "Tags": {
-          "project": {
-            "Ref": "ProjectName"
-          }
         }
       }
-    }
-  },
-  "Outputs": {
-    "BucketName": {
-      "Value": {
-        "Ref": "DemoBucket"
-      },
-      "Description": "Name of the demo S3 bucket"
     },
-    "SecurityGroupId": {
-      "Value": {
-        "Ref": "DemoSecurityGroup"
+    "Outputs": {
+      "BucketName": {
+        "Value": {
+          "Ref": "DemoBucket"
+        },
+        "Description": "Name of the demo S3 bucket"
       },
-      "Description": "ID of the demo security group"
-    },
-    "SSMParameterName": {
-      "Value": {
-        "Ref": "DemoSSMParameter"
+      "SecurityGroupId": {
+        "Value": {
+          "Ref": "DemoSecurityGroup"
+        },
+        "Description": "ID of the demo security group"
       },
-      "Description": "Name of the demo SSM parameter"
+      "SSMParameterName": {
+        "Value": {
+          "Ref": "DemoSSMParameter"
+        },
+        "Description": "Name of the demo SSM parameter"
+      }
     }
   }
 }
