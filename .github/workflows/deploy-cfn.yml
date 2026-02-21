@@ -1,0 +1,99 @@
+name: Deploy CloudFormation on PR Merge
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloudformation/infrastructure_cft.json'   # only trigger when drift report is updated
+
+jobs:
+  deploy:
+    name: Sync CFN Stack with AWS
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      # ---------------------------------------------------------- #
+      # 1. Checkout the repo                                        #
+      # ---------------------------------------------------------- #
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------- #
+      # 2. Configure AWS credentials                               #
+      # ---------------------------------------------------------- #
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ---------------------------------------------------------- #
+      # 3. Extract the original template from the drift report      #
+      # ---------------------------------------------------------- #
+      - name: Extract template from drift report
+        run: |
+          python3 - <<'EOF'
+          import json
+
+          with open("drift-reports/latest.json") as f:
+              report = json.load(f)
+
+          template = report["original_template"]
+
+          # template may already be a dict or a JSON string
+          if isinstance(template, str):
+              template = json.loads(template)
+
+          with open("template.json", "w") as f:
+              json.dump(template, f, indent=2)
+
+          print("Template extracted successfully")
+          print(f"Stack: {report['stack_name']}")
+          print(f"Drifted resources: {report['drift_count']}")
+          EOF
+
+      # ---------------------------------------------------------- #
+      # 4. Deploy the template to CloudFormation                    #
+      # ---------------------------------------------------------- #
+      - name: Deploy CloudFormation Stack
+        run: |
+          STACK_NAME="${{ secrets.STACK_NAME }}"
+
+          # Check if stack exists
+          if aws cloudformation describe-stacks --stack-name "$STACK_NAME" > /dev/null 2>&1; then
+            echo "Stack exists — running update"
+            ACTION="update-stack"
+          else
+            echo "Stack not found — running create"
+            ACTION="create-stack"
+          fi
+
+          aws cloudformation $ACTION \
+            --stack-name "$STACK_NAME" \
+            --template-body file://template.json \
+            --capabilities CAPABILITY_NAMED_IAM
+
+          echo "Waiting for stack operation to complete..."
+          aws cloudformation wait stack-update-complete \
+            --stack-name "$STACK_NAME" \
+            || aws cloudformation wait stack-create-complete \
+            --stack-name "$STACK_NAME"
+
+          echo "Stack deployed successfully"
+
+      # ---------------------------------------------------------- #
+      # 5. Print final stack status                                 #
+      # ---------------------------------------------------------- #
+      - name: Print Stack Status
+        if: always()
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name "${{ secrets.STACK_NAME }}" \
+            --query "Stacks[0].{Status:StackStatus,Updated:LastUpdatedTime}" \
+            --output table
