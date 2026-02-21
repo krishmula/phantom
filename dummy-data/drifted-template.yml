@@ -1,0 +1,233 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Payments Service Infrastructure - Production Stack (Safe State)"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+  TeamOwner:
+    Type: String
+    Default: payments-platform
+
+Resources:
+  # ---- VPC & Networking ----
+  PaymentsVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: payments-vpc
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Team
+          Value: !Ref TeamOwner
+        - Key: ManagedBy
+          Value: cloudformation
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PaymentsVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: payments-public-a
+        - Key: Environment
+          Value: !Ref Environment
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PaymentsVPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: payments-private-a
+        - Key: Environment
+          Value: !Ref Environment
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PaymentsVPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: payments-private-b
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---- Security Groups ----
+  # DRIFT: Added SSH rule (port 22) open to 0.0.0.0/0 during incident debugging
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for payments application servers
+      VpcId: !Ref PaymentsVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+          Description: HTTPS from VPC
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.0.0.0/16
+          Description: Application port from VPC
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH access for emergency debugging
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS outbound
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.10.0/24
+          Description: MySQL to private subnet A
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.11.0/24
+          Description: MySQL to private subnet B
+      Tags:
+        - Key: Name
+          Value: payments-app-sg
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Team
+          Value: !Ref TeamOwner
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for payments database
+      VpcId: !Ref PaymentsVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+          Description: MySQL from application servers only
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 127.0.0.1/32
+          Description: Deny all outbound (database should not initiate connections)
+      Tags:
+        - Key: Name
+          Value: payments-db-sg
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Team
+          Value: !Ref TeamOwner
+
+  # ---- EC2 Application Server ----
+  # DRIFT: Instance type changed from t3.medium to t3.xlarge during incident
+  # DRIFT: ManagedBy tag removed (console overwrites often drop tags)
+  PaymentsAppServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.xlarge
+      ImageId: ami-0c55b159cbfafe1f0
+      SubnetId: !Ref PublicSubnetA
+      SecurityGroupIds:
+        - !Ref AppSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            Encrypted: true
+      Monitoring: true
+      Tags:
+        - Key: Name
+          Value: payments-app-01
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Team
+          Value: !Ref TeamOwner
+        - Key: IncidentRef
+          Value: INC-2847
+
+  # ---- RDS Database ----
+  PaymentsDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for payments database
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      Tags:
+        - Key: Name
+          Value: payments-db-subnet-group
+        - Key: Environment
+          Value: !Ref Environment
+
+  # DRIFT: Instance class scaled from db.r5.large to db.r5.4xlarge during incident
+  # DRIFT: Backup retention reduced from 7 to 1 (probably accidental)
+  # DRIFT: Performance Insights disabled (probably accidental)
+  # DRIFT: DeletionProtection disabled (DANGEROUS - probably accidental)
+  PaymentsDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: payments-db-prod
+      DBInstanceClass: db.r5.4xlarge
+      Engine: mysql
+      EngineVersion: "8.0.35"
+      MasterUsername: payments_admin
+      MasterUserPassword: "{{resolve:secretsmanager:payments-db-password}}"
+      AllocatedStorage: 100
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: true
+      BackupRetentionPeriod: 1
+      PreferredBackupWindow: "03:00-04:00"
+      PreferredMaintenanceWindow: "sun:04:00-sun:05:00"
+      DeletionProtection: false
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      DBSubnetGroupName: !Ref PaymentsDBSubnetGroup
+      EnablePerformanceInsights: false
+      MonitoringInterval: 60
+      CopyTagsToSnapshot: true
+      Tags:
+        - Key: Name
+          Value: payments-db-prod
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Team
+          Value: !Ref TeamOwner
+        - Key: ManagedBy
+          Value: cloudformation
+        - Key: DataClassification
+          Value: pci-sensitive
+        - Key: IncidentRef
+          Value: INC-2847
+
+Outputs:
+  VPCId:
+    Value: !Ref PaymentsVPC
+    Export:
+      Name: payments-vpc-id
+  AppServerPrivateIP:
+    Value: !GetAtt PaymentsAppServer.PrivateIp
+  DatabaseEndpoint:
+    Value: !GetAtt PaymentsDatabase.Endpoint.Address
+  DatabasePort:
+    Value: !GetAtt PaymentsDatabase.Endpoint.Port

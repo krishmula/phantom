@@ -1,0 +1,66 @@
+{
+  "pricing_note": "Approximate monthly costs (us-east-1, on-demand, as of Feb 2026). Used for rough cost delta estimation only.",
+  "ec2_instances": {
+    "t3.micro": { "vcpu": 2, "memory_gb": 1, "monthly_usd": 7.59 },
+    "t3.small": { "vcpu": 2, "memory_gb": 2, "monthly_usd": 15.18 },
+    "t3.medium": { "vcpu": 2, "memory_gb": 4, "monthly_usd": 30.37 },
+    "t3.large": { "vcpu": 2, "memory_gb": 8, "monthly_usd": 60.74 },
+    "t3.xlarge": { "vcpu": 4, "memory_gb": 16, "monthly_usd": 121.47 },
+    "t3.2xlarge": { "vcpu": 8, "memory_gb": 32, "monthly_usd": 242.94 },
+    "m5.large": { "vcpu": 2, "memory_gb": 8, "monthly_usd": 70.08 },
+    "m5.xlarge": { "vcpu": 4, "memory_gb": 16, "monthly_usd": 140.16 },
+    "m5.2xlarge": { "vcpu": 8, "memory_gb": 32, "monthly_usd": 280.32 },
+    "c5.large": { "vcpu": 2, "memory_gb": 4, "monthly_usd": 62.05 },
+    "c5.xlarge": { "vcpu": 4, "memory_gb": 8, "monthly_usd": 124.1 },
+    "r5.large": { "vcpu": 2, "memory_gb": 16, "monthly_usd": 91.98 },
+    "r5.xlarge": { "vcpu": 4, "memory_gb": 32, "monthly_usd": 183.96 },
+    "r5.2xlarge": { "vcpu": 8, "memory_gb": 64, "monthly_usd": 367.92 }
+  },
+  "rds_instances": {
+    "db.t3.micro": { "vcpu": 2, "memory_gb": 1, "monthly_usd": 12.41 },
+    "db.t3.small": { "vcpu": 2, "memory_gb": 2, "monthly_usd": 24.82 },
+    "db.t3.medium": { "vcpu": 2, "memory_gb": 4, "monthly_usd": 49.64 },
+    "db.r5.large": { "vcpu": 2, "memory_gb": 16, "monthly_usd": 175.2 },
+    "db.r5.xlarge": { "vcpu": 4, "memory_gb": 32, "monthly_usd": 350.4 },
+    "db.r5.2xlarge": { "vcpu": 8, "memory_gb": 64, "monthly_usd": 700.8 },
+    "db.r5.4xlarge": { "vcpu": 16, "memory_gb": 128, "monthly_usd": 1401.6 },
+    "db.r5.8xlarge": { "vcpu": 32, "memory_gb": 256, "monthly_usd": 2803.2 },
+    "db.r6g.large": { "vcpu": 2, "memory_gb": 16, "monthly_usd": 157.68 },
+    "db.r6g.xlarge": { "vcpu": 4, "memory_gb": 32, "monthly_usd": 315.36 },
+    "db.r6g.2xlarge": { "vcpu": 8, "memory_gb": 64, "monthly_usd": 630.72 }
+  },
+  "rds_multi_az_multiplier": 2.0,
+  "rds_multi_az_note": "Multi-AZ doubles the instance cost. All costs above are single-AZ. Multiply by 2 for Multi-AZ deployments.",
+  "ebs_storage": {
+    "gp2": { "per_gb_monthly_usd": 0.1 },
+    "gp3": { "per_gb_monthly_usd": 0.08 },
+    "io1": { "per_gb_monthly_usd": 0.125, "per_iops_monthly_usd": 0.065 },
+    "io2": { "per_gb_monthly_usd": 0.125, "per_iops_monthly_usd": 0.065 }
+  },
+  "other": {
+    "nat_gateway": { "monthly_usd": 32.4, "per_gb_processed_usd": 0.045 },
+    "elastic_ip_unattached": { "monthly_usd": 3.6 },
+    "application_load_balancer": {
+      "monthly_usd": 16.2,
+      "per_lcu_hour_usd": 0.008
+    }
+  },
+  "demo_cost_calculation": {
+    "safe_state": {
+      "ec2_t3_medium": 30.37,
+      "rds_db_r5_large_multi_az": 350.4,
+      "ebs_50gb_gp3": 4.0,
+      "rds_storage_100gb_gp3": 8.0,
+      "total_monthly_usd": 392.77
+    },
+    "drifted_state": {
+      "ec2_t3_xlarge": 121.47,
+      "rds_db_r5_4xlarge_multi_az": 2803.2,
+      "ebs_50gb_gp3": 4.0,
+      "rds_storage_100gb_gp3": 8.0,
+      "total_monthly_usd": 2936.67
+    },
+    "monthly_cost_delta_usd": 2543.9,
+    "annualized_cost_delta_usd": 30526.8
+  }
+}

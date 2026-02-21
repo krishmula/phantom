@@ -1,0 +1,316 @@
+{
+  "query_parameters": {
+    "service": "payments-service",
+    "time_window_start": "2026-02-20T02:00:00Z",
+    "time_window_end": "2026-02-20T04:00:00Z",
+    "stack_name": "payments-prod-stack"
+  },
+  "incident": {
+    "id": "INC-2847",
+    "title": "payments-db-prod: Database CPU critical - transaction processing degraded",
+    "severity": "P1",
+    "status": "resolved",
+    "created_at": "2026-02-20T02:41:00Z",
+    "resolved_at": "2026-02-20T03:38:00Z",
+    "duration_minutes": 57,
+    "responder": "priya.sharma@acmecorp.com",
+    "timeline": [
+      {
+        "timestamp": "2026-02-20T02:41:00Z",
+        "event": "Monitor triggered: [P1] payments-db-prod CPU utilization > 95% for 5 minutes"
+      },
+      {
+        "timestamp": "2026-02-20T02:42:00Z",
+        "event": "PagerDuty alert sent to on-call engineer priya.sharma@acmecorp.com"
+      },
+      {
+        "timestamp": "2026-02-20T02:44:00Z",
+        "event": "On-call acknowledged incident"
+      },
+      {
+        "timestamp": "2026-02-20T02:47:00Z",
+        "event": "CloudTrail: ModifyDBInstance called by priya.sharma - changed DBInstanceClass from db.r5.large to db.r5.4xlarge"
+      },
+      {
+        "timestamp": "2026-02-20T02:48:00Z",
+        "event": "CloudTrail: ModifyDBInstance called by priya.sharma - BackupRetentionPeriod changed to 1, DeletionProtection set to false, PerformanceInsights disabled (side effects of console modify operation)"
+      },
+      {
+        "timestamp": "2026-02-20T02:50:00Z",
+        "event": "CloudTrail: AuthorizeSecurityGroupIngress called by priya.sharma - added port 22 inbound 0.0.0.0/0 on sg-0a1b2c3d4e5f67890"
+      },
+      {
+        "timestamp": "2026-02-20T02:51:00Z",
+        "event": "CloudTrail: ModifyInstanceAttribute called by priya.sharma - changed InstanceType from t3.medium to t3.xlarge on i-0abcdef1234567890"
+      },
+      {
+        "timestamp": "2026-02-20T02:55:00Z",
+        "event": "RDS instance modification in progress - applying new instance class"
+      },
+      {
+        "timestamp": "2026-02-20T03:18:00Z",
+        "event": "RDS instance modification complete - db.r5.4xlarge active"
+      },
+      {
+        "timestamp": "2026-02-20T03:22:00Z",
+        "event": "Database CPU dropped below 60%"
+      },
+      {
+        "timestamp": "2026-02-20T03:35:00Z",
+        "event": "Responder noted in Slack: 'DB scaled up, app server scaled up, SSH opened for debugging. Transaction backlog cleared. Will clean up in the morning.'"
+      },
+      {
+        "timestamp": "2026-02-20T03:38:00Z",
+        "event": "Incident marked as resolved"
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "id": "alert-88401",
+      "monitor_name": "payments-db-prod CPU utilization critical",
+      "monitor_type": "metric alert",
+      "status": "resolved",
+      "priority": "P1",
+      "triggered_at": "2026-02-20T02:41:00Z",
+      "resolved_at": "2026-02-20T03:22:00Z",
+      "query": "avg(last_5m):avg:aws.rds.cpuutilization{dbinstanceidentifier:payments-db-prod} > 95",
+      "threshold": 95,
+      "peak_value": 99.2,
+      "tags": [
+        "service:payments-service",
+        "env:production",
+        "team:payments-platform"
+      ]
+    },
+    {
+      "id": "alert-88403",
+      "monitor_name": "payments-service: elevated p99 latency",
+      "monitor_type": "metric alert",
+      "status": "resolved",
+      "priority": "P2",
+      "triggered_at": "2026-02-20T02:43:00Z",
+      "resolved_at": "2026-02-20T03:30:00Z",
+      "query": "avg(last_5m):avg:trace.payments.request.duration.p99{service:payments-service} > 5000",
+      "threshold": 5000,
+      "peak_value": 14200,
+      "tags": ["service:payments-service", "env:production"]
+    },
+    {
+      "id": "alert-88405",
+      "monitor_name": "payments-service: error rate spike",
+      "monitor_type": "metric alert",
+      "status": "resolved",
+      "priority": "P2",
+      "triggered_at": "2026-02-20T02:44:00Z",
+      "resolved_at": "2026-02-20T03:25:00Z",
+      "query": "avg(last_5m):sum:trace.payments.request.errors{service:payments-service}.as_rate() / sum:trace.payments.request.hits{service:payments-service}.as_rate() > 0.05",
+      "threshold": 0.05,
+      "peak_value": 0.23,
+      "tags": ["service:payments-service", "env:production"]
+    },
+    {
+      "id": "alert-88407",
+      "monitor_name": "payments-db-prod: connection count approaching limit",
+      "monitor_type": "metric alert",
+      "status": "resolved",
+      "priority": "P2",
+      "triggered_at": "2026-02-20T02:45:00Z",
+      "resolved_at": "2026-02-20T03:20:00Z",
+      "query": "avg(last_5m):avg:aws.rds.database_connections{dbinstanceidentifier:payments-db-prod} > 180",
+      "threshold": 180,
+      "peak_value": 197,
+      "tags": [
+        "service:payments-service",
+        "env:production",
+        "team:payments-platform"
+      ]
+    }
+  ],
+  "metrics": {
+    "rds": {
+      "resource_id": "payments-db-prod",
+      "datapoints": {
+        "cpu_utilization": {
+          "unit": "percent",
+          "pre_incident_avg": 42.3,
+          "during_incident_peak": 99.2,
+          "during_incident_avg": 91.7,
+          "post_resolution_avg": 28.6,
+          "post_resolution_note": "Post-resolution average is on db.r5.4xlarge (4x capacity of original db.r5.large)",
+          "time_series_5min": [
+            { "timestamp": "2026-02-20T02:00:00Z", "value": 38.1 },
+            { "timestamp": "2026-02-20T02:05:00Z", "value": 40.2 },
+            { "timestamp": "2026-02-20T02:10:00Z", "value": 41.5 },
+            { "timestamp": "2026-02-20T02:15:00Z", "value": 43.8 },
+            { "timestamp": "2026-02-20T02:20:00Z", "value": 52.1 },
+            { "timestamp": "2026-02-20T02:25:00Z", "value": 67.4 },
+            { "timestamp": "2026-02-20T02:30:00Z", "value": 82.9 },
+            { "timestamp": "2026-02-20T02:35:00Z", "value": 93.1 },
+            { "timestamp": "2026-02-20T02:40:00Z", "value": 97.8 },
+            { "timestamp": "2026-02-20T02:45:00Z", "value": 99.2 },
+            { "timestamp": "2026-02-20T02:50:00Z", "value": 98.4 },
+            { "timestamp": "2026-02-20T02:55:00Z", "value": 96.1 },
+            { "timestamp": "2026-02-20T03:00:00Z", "value": 89.3 },
+            { "timestamp": "2026-02-20T03:05:00Z", "value": 78.2 },
+            { "timestamp": "2026-02-20T03:10:00Z", "value": 64.5 },
+            { "timestamp": "2026-02-20T03:15:00Z", "value": 52.1 },
+            { "timestamp": "2026-02-20T03:20:00Z", "value": 38.4 },
+            { "timestamp": "2026-02-20T03:25:00Z", "value": 31.2 },
+            { "timestamp": "2026-02-20T03:30:00Z", "value": 28.9 },
+            { "timestamp": "2026-02-20T03:35:00Z", "value": 27.4 },
+            { "timestamp": "2026-02-20T03:40:00Z", "value": 29.1 },
+            { "timestamp": "2026-02-20T03:45:00Z", "value": 28.3 },
+            { "timestamp": "2026-02-20T03:50:00Z", "value": 27.8 },
+            { "timestamp": "2026-02-20T03:55:00Z", "value": 28.5 }
+          ]
+        },
+        "database_connections": {
+          "unit": "count",
+          "pre_incident_avg": 85,
+          "during_incident_peak": 197,
+          "post_resolution_avg": 82,
+          "max_connections_limit": 200
+        },
+        "read_iops": {
+          "unit": "count/sec",
+          "pre_incident_avg": 1200,
+          "during_incident_peak": 8900,
+          "post_resolution_avg": 1050
+        },
+        "write_iops": {
+          "unit": "count/sec",
+          "pre_incident_avg": 450,
+          "during_incident_peak": 3200,
+          "post_resolution_avg": 420
+        },
+        "freeable_memory": {
+          "unit": "bytes",
+          "pre_incident_avg": 4294967296,
+          "during_incident_min": 536870912,
+          "post_resolution_avg": 28991029248,
+          "post_resolution_note": "Dramatically higher due to 4x instance size (db.r5.4xlarge = 128GB RAM vs db.r5.large = 16GB)"
+        }
+      }
+    },
+    "ec2": {
+      "resource_id": "i-0abcdef1234567890",
+      "datapoints": {
+        "cpu_utilization": {
+          "unit": "percent",
+          "pre_incident_avg": 55.2,
+          "during_incident_peak": 78.3,
+          "post_resolution_avg": 22.1,
+          "post_resolution_note": "Post-resolution average is on t3.xlarge (4 vCPUs vs t3.medium 2 vCPUs)"
+        },
+        "network_in": {
+          "unit": "bytes/sec",
+          "pre_incident_avg": 15000000,
+          "during_incident_peak": 42000000,
+          "post_resolution_avg": 14200000
+        }
+      }
+    },
+    "application": {
+      "service": "payments-service",
+      "datapoints": {
+        "request_rate": {
+          "unit": "requests/sec",
+          "pre_incident_avg": 340,
+          "during_incident_value": 355,
+          "post_resolution_avg": 338,
+          "note": "Request rate was relatively stable — this was NOT a traffic spike. The issue was a slow query causing CPU saturation."
+        },
+        "p99_latency": {
+          "unit": "ms",
+          "pre_incident_avg": 850,
+          "during_incident_peak": 14200,
+          "post_resolution_avg": 420,
+          "post_resolution_note": "Lower than pre-incident due to oversized instances"
+        },
+        "error_rate": {
+          "unit": "ratio",
+          "pre_incident_avg": 0.002,
+          "during_incident_peak": 0.23,
+          "post_resolution_avg": 0.001
+        }
+      }
+    }
+  },
+  "traces": {
+    "slow_query_identified": true,
+    "root_cause_trace": {
+      "trace_id": "abc123def456789",
+      "service": "payments-service",
+      "operation": "POST /api/v1/payments/process-batch",
+      "duration_ms": 12400,
+      "timestamp": "2026-02-20T02:38:00Z",
+      "spans": [
+        {
+          "span_id": "span-001",
+          "operation": "payments.process_batch",
+          "duration_ms": 12400,
+          "status": "error",
+          "tags": { "batch_size": 500, "merchant_id": "merch-44921" }
+        },
+        {
+          "span_id": "span-002",
+          "parent_span_id": "span-001",
+          "operation": "mysql.query",
+          "resource": "SELECT * FROM transactions WHERE merchant_id = ? AND status = 'pending' ORDER BY created_at",
+          "duration_ms": 11800,
+          "status": "ok",
+          "tags": {
+            "db.instance": "payments-db-prod",
+            "db.type": "mysql",
+            "db.rows_examined": 2847000,
+            "db.rows_returned": 487,
+            "note": "Full table scan — missing index on (merchant_id, status) compound index"
+          }
+        }
+      ]
+    },
+    "analysis": "The root cause was a full table scan on the transactions table (2.8M rows examined for 487 returned). A missing compound index on (merchant_id, status) caused the query to saturate CPU. This is a query optimization issue, NOT a capacity issue. Scaling the database masks the problem temporarily but does not fix the root cause."
+  },
+  "logs": {
+    "notable_entries": [
+      {
+        "timestamp": "2026-02-20T02:39:00Z",
+        "level": "WARN",
+        "service": "payments-service",
+        "message": "Slow query detected: SELECT * FROM transactions WHERE merchant_id = ? AND status = 'pending' — 11.8s (threshold: 2s)",
+        "attributes": { "query_time_ms": 11800, "rows_examined": 2847000 }
+      },
+      {
+        "timestamp": "2026-02-20T02:41:00Z",
+        "level": "ERROR",
+        "service": "payments-service",
+        "message": "Connection pool exhausted — all 100 connections in use. Requests queuing.",
+        "attributes": {
+          "pool_size": 100,
+          "active_connections": 100,
+          "queued_requests": 47
+        }
+      },
+      {
+        "timestamp": "2026-02-20T02:43:00Z",
+        "level": "ERROR",
+        "service": "payments-service",
+        "message": "Payment processing timeout for batch job batch-78291. 23% of transactions in batch failed.",
+        "attributes": {
+          "batch_id": "batch-78291",
+          "total": 500,
+          "failed": 115,
+          "timeout_ms": 30000
+        }
+      },
+      {
+        "timestamp": "2026-02-20T02:52:00Z",
+        "level": "INFO",
+        "service": "payments-service",
+        "message": "SSH session established from 73.162.45.88 (priya.sharma workstation)",
+        "attributes": { "source_ip": "73.162.45.88", "user": "ec2-user" }
+      }
+    ]
+  }
+}
