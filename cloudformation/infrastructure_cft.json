@@ -31,12 +31,6 @@
         "SecurityGroupIngress": [
           {
             "IpProtocol": "tcp",
-            "FromPort": 80,
-            "ToPort": 80,
-            "CidrIp": "0.0.0.0/0"
-          },
-          {
-            "IpProtocol": "tcp",
             "FromPort": 110,
             "ToPort": 110,
             "CidrIp": "0.0.0.0/0"
@@ -45,12 +39,6 @@
             "IpProtocol": "tcp",
             "FromPort": 22,
             "ToPort": 22,
-            "CidrIp": "0.0.0.0/0"
-          },
-          {
-            "IpProtocol": "tcp",
-            "FromPort": 10,
-            "ToPort": 10,
             "CidrIp": "0.0.0.0/0"
           },
           {
