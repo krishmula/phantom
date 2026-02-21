@@ -46,38 +46,138 @@ BEDROCK_INVOKE_URL = (
 # ---------------------------------------------------------------------------
 # Data Loading
 # ---------------------------------------------------------------------------
-def load_json(filename: str) -> dict:
-    """Load a JSON file from dummy-data/."""
-    path = DUMMY_DATA_DIR / filename
+def load_cost_reference() -> dict:
+    """Load cost reference from dummy-data/."""
+    path = DUMMY_DATA_DIR / "cost-reference.json"
     with open(path) as f:
         return json.load(f)
 
 
-def load_text(filename: str) -> str:
-    """Load a text/YAML file from dummy-data/ as raw string."""
-    path = DUMMY_DATA_DIR / filename
-    with open(path) as f:
-        return f.read()
+# ---------------------------------------------------------------------------
+# Insights (drift) parser
+# ---------------------------------------------------------------------------
+
+def _normalise_diff(insights: dict) -> dict:
+    """
+    Convert the insights dict into the structured-diff format
+    expected by build_user_message() and the Bedrock prompt.
+
+    Input shape (insights):
+      .drifted_resources[]
+        .LogicalId, .ResourceType, .PhysicalId (optional)
+        .PropertyDiffs[]
+          .PropertyPath  e.g. "/SecurityGroupIngress/1"
+          .ExpectedValue (JSON string or "null")
+          .ActualValue   (JSON string or "null")
+          .DifferenceType  ADD | REMOVE | NOT_EQUAL
+
+    Output mirrors structured-diff.json.
+    """
+    TYPE_MAP = {
+        "ADD": "property_added",
+        "REMOVE": "property_removed",
+        "NOT_EQUAL": "property_changed",
+    }
+
+    changes = []
+    change_idx = 1
+
+    for resource in insights.get("drifted_resources", []):
+        logical_id = resource["LogicalId"]
+        resource_type = resource["ResourceType"]
+        physical_id = resource.get("PhysicalId", "")
+
+        for diff in resource.get("PropertyDiffs", []):
+            # PropertyPath: "/SecurityGroupIngress/1" → "SecurityGroupIngress[1]"
+            raw_path: str = diff["PropertyPath"].lstrip("/")
+            parts = raw_path.split("/")
+            if len(parts) == 2 and parts[1].isdigit():
+                property_path = f"{parts[0]}[{parts[1]}]"
+            elif len(parts) == 1:
+                property_path = parts[0]
+            else:
+                # nested path: keep dot-separated for now
+                property_path = ".".join(parts)
+
+            def _parse_val(s: str):
+                if s in ("null", None, ""):
+                    return None
+                try:
+                    return json.loads(s)
+                except (json.JSONDecodeError, TypeError):
+                    return s
+
+            old_val = _parse_val(diff["ExpectedValue"])
+            new_val = _parse_val(diff["ActualValue"])
+            diff_type = TYPE_MAP.get(diff["DifferenceType"], "property_changed")
+
+            changes.append({
+                "change_id": f"DRIFT-{change_idx:03d}",
+                "resource_type": resource_type,
+                "resource_logical_id": logical_id,
+                "resource_physical_id": physical_id,
+                "change_type": diff_type,
+                "property_path": property_path,
+                "old_value": old_val,
+                "new_value": new_val,
+                "severity_hint": "medium",
+                "category": "configuration",
+            })
+            change_idx += 1
+
+    # Count unique resources affected
+    resources_affected = len({c["resource_logical_id"] for c in changes})
+
+    return {
+        "stack_name": insights.get("stack_name", "unknown-stack"),
+        "detection_timestamp": "",
+        "summary": {
+            "total_changes": len(changes),
+            "resources_affected": resources_affected,
+        },
+        "changes": changes,
+    }
 
 
-def load_structured_diff() -> dict:
-    return load_json("structured-diff.json")
+def _build_drifted_template(safe_state: dict, insights: dict) -> dict:
+    """
+    Construct a drifted-state template dict by patching the safe-state
+    template's resource properties with ActualProperties from the insights.
+    """
+    import copy
+    drifted = copy.deepcopy(safe_state)
+
+    for resource in insights.get("drifted_resources", []):
+        logical_id = resource["LogicalId"]
+        actual_props = resource.get("ActualProperties", {})
+        if logical_id in drifted.get("Resources", {}):
+            drifted["Resources"][logical_id]["Properties"] = actual_props
+
+    return drifted
 
 
-def load_datadog_context() -> dict:
-    return load_json("sample-datadog-context.json")
+def parse_insights(insights: dict) -> tuple[dict, dict, dict]:
+    """
+    Parse the ``insights`` section of the input event.
 
+    Args:
+        insights: dict containing stack_name, drifted_resources,
+                  original_template, cloudtrail_events, etc.
 
-def load_cost_reference() -> dict:
-    return load_json("cost-reference.json")
+    Returns:
+        (structured_diff, safe_state_template, drifted_template)
+    """
+    # original_template may be a JSON string or already a dict
+    orig_tpl_raw = insights.get("original_template", "{}")
+    if isinstance(orig_tpl_raw, str):
+        safe_state = json.loads(orig_tpl_raw)
+    else:
+        safe_state = orig_tpl_raw
 
+    structured_diff = _normalise_diff(insights)
+    drifted_template = _build_drifted_template(safe_state, insights)
 
-def load_safe_state_template() -> str:
-    return load_text("safe-state-template.yaml")
-
-
-def load_drifted_template() -> str:
-    return load_text("drifted-template.yml")
+    return structured_diff, safe_state, drifted_template
 
 
 # ---------------------------------------------------------------------------
@@ -152,8 +252,8 @@ OUTPUT JSON SCHEMA:
 
 def build_user_message(
     diff: dict,
-    safe_state: str,
-    drifted_state: str,
+    safe_state,
+    drifted_state,
     datadog_context: dict,
     cost_reference: dict,
 ) -> str:
@@ -162,9 +262,13 @@ def build_user_message(
 
     sections.append("=== STRUCTURED DIFF ===\n" + json.dumps(diff, indent=2))
     sections.append(
-        "=== SAFE-STATE TEMPLATE (version-controlled IaC) ===\n" + safe_state
+        "=== SAFE-STATE TEMPLATE (version-controlled IaC) ===\n"
+        + (json.dumps(safe_state, indent=2) if isinstance(safe_state, dict) else safe_state)
     )
-    sections.append("=== DRIFTED TEMPLATE (live AWS state) ===\n" + drifted_state)
+    sections.append(
+        "=== DRIFTED TEMPLATE (live AWS state) ===\n"
+        + (json.dumps(drifted_state, indent=2) if isinstance(drifted_state, dict) else drifted_state)
+    )
     sections.append(
         "=== DATADOG OBSERVABILITY CONTEXT ===\n"
         + json.dumps(datadog_context, indent=2)
@@ -401,16 +505,25 @@ def print_report(report: dict) -> None:
 # ---------------------------------------------------------------------------
 # Main Pipeline
 # ---------------------------------------------------------------------------
-def run_analysis() -> dict:
-    """Orchestrate the full Phantom analysis pipeline."""
+def run_analysis(event: dict) -> dict:
+    """
+    Orchestrate the full Phantom analysis pipeline.
+
+    Args:
+        event: dict with two keys:
+            - insights:      drift data (stack_name, drifted_resources,
+                             original_template, cloudtrail_events, ...)
+            - observability:  Datadog context (logs, metrics, traces, events)
+    """
     print("\n🔍 Phantom Analyzer — Starting drift analysis...\n")
 
-    # 1. Load data
-    print("1/4  Loading drift data...")
-    diff = load_structured_diff()
-    safe_state = load_safe_state_template()
-    drifted_state = load_drifted_template()
-    datadog_ctx = load_datadog_context()
+    insights = event["insights"]
+    observability = event["observability"]
+
+    # 1. Parse inputs
+    print("1/4  Parsing drift data from insights...")
+    diff, safe_state, drifted_state = parse_insights(insights)
+    datadog_ctx = observability
     cost_ref = load_cost_reference()
     print(
         f"     ✓ Loaded {diff['summary']['total_changes']} changes across "
@@ -433,7 +546,7 @@ def run_analysis() -> dict:
     report = parse_analysis_response(raw_response)
     print(f"     ✓ Parsed {len(report.get('changes', []))} change recommendations")
 
-    # Write output
+    # Write JSON output
     with open(OUTPUT_FILE, "w") as f:
         json.dump(report, f, indent=2)
     print(f"\n📄 Full JSON report saved to: {OUTPUT_FILE}")
@@ -441,12 +554,42 @@ def run_analysis() -> dict:
     # Pretty-print
     print_report(report)
 
+    # 5. Rectify CloudFormation template
+    from rectifier import rectify
+    rectified_yaml = rectify(
+        analysis=report,
+        safe_state=safe_state,
+        drifted_state=drifted_state,
+    )
+    report["rectified_template"] = rectified_yaml
+    print(f"\n  ✅ Rectified template generated ({len(rectified_yaml):,} chars)")
+
+    # Re-write output JSON now that rectified_template is included
+    with open(OUTPUT_FILE, "w") as f:
+        json.dump(report, f, indent=2)
+
     return report
 
 
 if __name__ == "__main__":
+    # Local testing: build the event from diff-output.json + sample Datadog context
     try:
-        run_analysis()
+        diff_output_path = Path(__file__).parent / "diff-output.json"
+        datadog_path = DUMMY_DATA_DIR / "sample-datadog-context.json"
+
+        with open(diff_output_path) as f:
+            envelope = json.load(f)
+        body_raw = envelope.get("body", envelope)
+        insights = json.loads(body_raw) if isinstance(body_raw, str) else body_raw
+
+        with open(datadog_path) as f:
+            observability = json.load(f)
+
+        test_event = {
+            "insights": insights,
+            "observability": observability,
+        }
+        run_analysis(test_event)
     except KeyboardInterrupt:
         print("\n\nAborted.")
         sys.exit(1)
