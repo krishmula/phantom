@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-20T23:46:55.312025+00:00",
+  "generated_at": "2026-02-21T00:10:21.612982+00:00",
   "stack_name": "phantom-test-stack",
   "drift_status": "DRIFTED",
   "drift_count": 1,
@@ -37,6 +37,12 @@
           },
           {
             "CidrIp": "0.0.0.0/0",
+            "FromPort": 110,
+            "IpProtocol": "tcp",
+            "ToPort": 110
+          },
+          {
+            "CidrIp": "0.0.0.0/0",
             "FromPort": 22,
             "IpProtocol": "tcp",
             "ToPort": 22
@@ -59,11 +65,17 @@
         {
           "PropertyPath": "/SecurityGroupIngress/1",
           "ExpectedValue": "null",
-          "ActualValue": "{\"CidrIp\":\"0.0.0.0/0\",\"FromPort\":22,\"IpProtocol\":\"tcp\",\"ToPort\":22}",
+          "ActualValue": "{\"CidrIp\":\"0.0.0.0/0\",\"FromPort\":110,\"IpProtocol\":\"tcp\",\"ToPort\":110}",
           "DifferenceType": "ADD"
         },
         {
           "PropertyPath": "/SecurityGroupIngress/2",
+          "ExpectedValue": "null",
+          "ActualValue": "{\"CidrIp\":\"0.0.0.0/0\",\"FromPort\":22,\"IpProtocol\":\"tcp\",\"ToPort\":22}",
+          "DifferenceType": "ADD"
+        },
+        {
+          "PropertyPath": "/SecurityGroupIngress/3",
           "ExpectedValue": "null",
           "ActualValue": "{\"CidrIp\":\"0.0.0.0/0\",\"FromPort\":4001,\"IpProtocol\":\"tcp\",\"ToPort\":4001}",
           "DifferenceType": "ADD"
