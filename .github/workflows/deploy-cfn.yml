@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'cloudformation/infrastructure_cft.json'   # only trigger when drift report is updated
+      - 'cloudformation/infrastructure_cft.json'
 
 jobs:
   deploy:
@@ -17,15 +17,9 @@ jobs:
 
     steps:
 
-      # ---------------------------------------------------------- #
-      # 1. Checkout the repo                                        #
-      # ---------------------------------------------------------- #
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------- #
-      # 2. Configure AWS credentials                               #
-      # ---------------------------------------------------------- #
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -34,58 +28,54 @@ jobs:
           aws-region:            ${{ secrets.AWS_REGION }}
 
       # ---------------------------------------------------------- #
-      # 3. Extract the original template from the drift report      #
+      # 3. Use the corrected template directly — no extraction needed
       # ---------------------------------------------------------- #
-      - name: Extract template from drift report
+      - name: Prepare CFN template
         run: |
-          python3 - <<'EOF'
-          import json
-
-          with open("cloudformation/infrastructure_cft.json") as f:
-              report = json.load(f)
-
-          template = report["original_template"]
-
-          # template may already be a dict or a JSON string
-          if isinstance(template, str):
-              template = json.loads(template)
-
-          with open("template.json", "w") as f:
-              json.dump(template, f, indent=2)
-
-          print("Template extracted successfully")
-          print(f"Stack: {report['stack_name']}")
-          print(f"Drifted resources: {report['drift_count']}")
-          EOF
+          cp cloudformation/infrastructure_cft.json template.json
+          echo "Template ready ✓"
+          echo "=== Preview ==="
+          cat template.json | python3 -m json.tool | head -20
 
       # ---------------------------------------------------------- #
-      # 4. Deploy the template to CloudFormation                    #
+      # 4. Deploy to CloudFormation                                 #
       # ---------------------------------------------------------- #
       - name: Deploy CloudFormation Stack
         run: |
           STACK_NAME="${{ secrets.STACK_NAME }}"
 
-          # Check if stack exists
           if aws cloudformation describe-stacks --stack-name "$STACK_NAME" > /dev/null 2>&1; then
             echo "Stack exists — running update"
-            ACTION="update-stack"
+
+            UPDATE_OUTPUT=$(aws cloudformation update-stack \
+              --stack-name "$STACK_NAME" \
+              --template-body file://template.json \
+              --capabilities CAPABILITY_NAMED_IAM 2>&1) || true
+
+            echo "Update output: $UPDATE_OUTPUT"
+
+            if echo "$UPDATE_OUTPUT" | grep -q "No updates are to be performed"; then
+              echo "✅ Stack already in sync — no changes needed"
+              exit 0
+            elif echo "$UPDATE_OUTPUT" | grep -q "StackId"; then
+              echo "⏳ Waiting for update to complete..."
+              aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+              echo "✅ Stack updated successfully"
+            else
+              echo "❌ Error: $UPDATE_OUTPUT"
+              exit 1
+            fi
+
           else
             echo "Stack not found — running create"
-            ACTION="create-stack"
+            aws cloudformation create-stack \
+              --stack-name "$STACK_NAME" \
+              --template-body file://template.json \
+              --capabilities CAPABILITY_NAMED_IAM
+
+            aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME"
+            echo "✅ Stack created successfully"
           fi
-
-          aws cloudformation $ACTION \
-            --stack-name "$STACK_NAME" \
-            --template-body file://template.json \
-            --capabilities CAPABILITY_NAMED_IAM
-
-          echo "Waiting for stack operation to complete..."
-          aws cloudformation wait stack-update-complete \
-            --stack-name "$STACK_NAME" \
-            || aws cloudformation wait stack-create-complete \
-            --stack-name "$STACK_NAME"
-
-          echo "Stack deployed successfully"
 
       # ---------------------------------------------------------- #
       # 5. Print final stack status                                 #
