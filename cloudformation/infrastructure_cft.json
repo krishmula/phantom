@@ -46,6 +46,12 @@
             "FromPort": 4001,
             "ToPort": 4001,
             "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 555,
+            "ToPort": 555,
+            "CidrIp": "0.0.0.0/0"
           }
         ],
         "Tags": [
