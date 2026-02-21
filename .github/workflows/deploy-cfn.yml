@@ -41,7 +41,7 @@ jobs:
           python3 - <<'EOF'
           import json
 
-          with open("drift-reports/latest.json") as f:
+          with open("cloudformation/infrastructure_cft.json") as f:
               report = json.load(f)
 
           template = report["original_template"]
